@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// 1. 标准资产表 — 跨平台同款卡牌聚合为虚拟「标准代码」
+model StandardAsset {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String         // 卡牌名：如「奇树」「皮卡丘」
+  category     AssetCategory  @default(PTCG)
+  language     CardLanguage?  // 语言版本
+  series       String?        // 系列：如 M2a、151
+  cardNumber   String?        // 编号：如 246/193
+  rarity       String?        // 罕度：SAR / AR / SR / RR 等
+  gradingCompany GradingCompany @default(RAW) // 评级公司 / 裸卡
+  gradeScore     String?        // 分数：10 / 9 / 黑金10 / 金10
+  isMonitoring Boolean        @default(true)
+  createdAt    DateTime       @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  channels AssetChannel[]
+  prices   PriceStream[]
+
+  @@index([isMonitoring])
+  @@index([category])
+  @@index([series])
+  @@index([language])
+}
+
+/// 2. 渠道配置表 — 各平台抓取规则（WEB 列表页 / VISION 搜索词）
+model AssetChannel {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assetId       String        @db.Uuid
+  asset         StandardAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  platform      Platform
+  trackType     TrackType
+  sourceUrl         String?       // 直售 / 挂牌列表页
+  sourceUrlAuction  String?       // 拍卖列表页（卡乐等与直售分页时使用）
+  searchKeyword String?
+  createdAt     DateTime      @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([assetId, platform])
+  @@index([platform])
+  @@index([trackType])
+}
+
+/// 3. 全网统一价格流水 — 多平台、多交易类型天级去重
+model PriceStream {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assetId    String        @db.Uuid
+  asset      StandardAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  platform   Platform
+  tradeType  String
+  gradeLabel String?       // 评级标签：裸卡 / PSA10 / CGC9 / CGC黑金10
+  price      Float
+  info       String?
+  capturedAt DateTime      @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
+
+  @@unique([assetId, capturedAt, platform, tradeType])
+  @@index([assetId, capturedAt(sort: Desc)])
+  @@index([platform])
+}
+
+enum AssetCategory {
+  PTCG // 宝可梦卡牌
+  OPCG // One Piece 卡牌
+}
+
+enum CardLanguage {
+  JA // 日语 / 日版
+  ZH // 简体中文
+  EN // 英语 / 美版
+}
+
+enum Platform {
+  JIHUANSHE // 集换社
+  POKECOLOR // 卡乐
+  KATAO // 卡淘
+}
+
+enum TrackType {
+  WEB // 网页列表爬虫（卡淘 / 卡乐）
+  VISION_AI // AI 视觉外挂（集换社等）
+}
+
+enum GradingCompany {
+  RAW // 裸卡 / 无评级
+  PSA
+  CGC
+  BGS
+  OTHER // TAG / GCG / ARS 等
+}

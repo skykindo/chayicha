@@ -1,0 +1,25 @@
+{
+  "name": "everyasset-kline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "万物皆可K线 — 跨品类资产价格监控与K线看板",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@everyasset/web",
+    "build": "npm run build --workspace=@everyasset/web",
+    "db:generate": "npm run generate --workspace=@everyasset/db",
+    "db:push": "npm run push --workspace=@everyasset/db",
+    "db:migrate": "npm run migrate --workspace=@everyasset/db",
+    "db:studio": "npm run studio --workspace=@everyasset/db",
+    "scraper": "npm run start --workspace=@everyasset/scraper",
+    "scraper:dev": "npm run dev --workspace=@everyasset/scraper",
+    "scraper:browser": "npm run browser:install --workspace=@everyasset/scraper",
+    "scraper:test": "npm run test:url --workspace=@everyasset/scraper"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}
