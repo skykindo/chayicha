@@ -1,41 +1,59 @@
-import { prisma, type Platform } from "@everyasset/db";
-import { startOfDay } from "./utils/dates.js";
+import { prisma, parseCardCondition, type Platform } from "@everyasset/db";
+import { toCapturedDateString } from "./utils/parse-sentiment.js";
 
 export type StreamInput = {
-  assetId: string;
+  assetKey: string;
   platform: Platform;
   tradeType: "AUCTION" | "FLOOR";
-  gradeLabel?: string | null;
+  cardCondition?: string | null;
   price: number;
   info?: string | null;
+  bidCount?: number | null;
+  bidderCount?: number | null;
+  watchCount?: number | null;
+  isDelayed?: boolean;
   capturedAt?: Date;
 };
 
 export async function upsertPriceStream(input: StreamInput) {
-  const capturedAt = startOfDay(input.capturedAt);
+  const capturedAt = input.capturedAt ?? new Date();
+  const capturedDate = toCapturedDateString(capturedAt);
+  const info = input.info?.trim() || "";
+  const cardCondition =
+    input.cardCondition ?? parseCardCondition(info, null);
 
   return prisma.priceStream.upsert({
     where: {
-      assetId_capturedAt_platform_tradeType: {
-        assetId: input.assetId,
-        capturedAt,
+      assetKey_platform_tradeType_price_capturedDate_cardCondition_info: {
+        assetKey: input.assetKey,
         platform: input.platform,
         tradeType: input.tradeType,
+        price: input.price,
+        capturedDate,
+        cardCondition,
+        info,
       },
     },
     create: {
-      assetId: input.assetId,
+      assetKey: input.assetKey,
       platform: input.platform,
       tradeType: input.tradeType,
-      gradeLabel: input.gradeLabel ?? null,
+      cardCondition,
       price: input.price,
-      info: input.info ?? null,
+      info: info || null,
+      bidCount: input.bidCount ?? null,
+      bidderCount: input.bidderCount ?? null,
+      watchCount: input.watchCount ?? null,
+      isDelayed: input.isDelayed ?? false,
       capturedAt,
+      capturedDate,
     },
     update: {
-      price: input.price,
-      gradeLabel: input.gradeLabel ?? null,
-      info: input.info ?? null,
+      bidCount: input.bidCount ?? null,
+      bidderCount: input.bidderCount ?? null,
+      watchCount: input.watchCount ?? null,
+      isDelayed: input.isDelayed ?? false,
+      capturedAt,
     },
   });
 }

@@ -24,18 +24,26 @@ if (!listUrl) {
 
 const mockAsset = {
   id: "test",
+  assetKey: "test-asset",
   name: keyword,
   category: AssetCategory.PTCG,
+  language: null,
+  year: null,
+  series: null,
+  cardNumber: null,
+  rarity: null,
+  imageUrl: null,
   isMonitoring: true,
   createdAt: new Date(),
 };
 
 const mockChannel = {
   id: "test-ch",
-  assetId: "test",
+  assetKey: "test-asset",
   platform: listUrl.includes("pokecolor") ? Platform.POKECOLOR : Platform.KATAO,
   trackType: TrackType.WEB,
   sourceUrl: listUrl,
+  sourceUrlAuction: null,
   searchKeyword: keyword,
   createdAt: new Date(),
 };

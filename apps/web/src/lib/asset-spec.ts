@@ -1,5 +1,4 @@
-import type { CardLanguage, GradingCompany } from "@everyasset/db";
-import { formatAssetGradeLabel } from "@everyasset/db";
+import type { CardLanguage } from "@everyasset/db";
 
 const LANGUAGE_ALIASES: Record<CardLanguage, string[]> = {
   JA: ["日版", "日文", "日语", "ja", "japanese", "jp"],
@@ -10,11 +9,10 @@ const LANGUAGE_ALIASES: Record<CardLanguage, string[]> = {
 export type AssetSpecFields = {
   name: string;
   language?: CardLanguage | null;
+  year?: number | null;
   series?: string | null;
   cardNumber?: string | null;
   rarity?: string | null;
-  gradingCompany?: GradingCompany;
-  gradeScore?: string | null;
 };
 
 export function formatAssetSpec(asset: AssetSpecFields): string {
@@ -28,19 +26,10 @@ export function formatAssetSpec(asset: AssetSpecFields): string {
           : "英文",
     );
   }
+  if (asset.year) parts.push(String(asset.year));
   if (asset.series) parts.push(asset.series);
   if (asset.cardNumber) parts.push(`#${asset.cardNumber}`);
   if (asset.rarity) parts.push(asset.rarity);
-  if (asset.gradingCompany && asset.gradingCompany !== "RAW") {
-    parts.push(
-      formatAssetGradeLabel({
-        gradingCompany: asset.gradingCompany,
-        gradeScore: asset.gradeScore ?? null,
-      }),
-    );
-  } else if (asset.gradingCompany === "RAW") {
-    parts.push("裸卡");
-  }
   return parts.join(" · ");
 }
 

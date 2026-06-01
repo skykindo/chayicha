@@ -1,53 +1,161 @@
-import Link from "next/link";
-import { KLineChart } from "@/components/charts/kline-chart";
+import { prisma } from "@/lib/db";
+import { PortfolioSummary } from "@/components/portfolio-summary";
+import { AssetList, type AssetListRow } from "@/components/asset-list";
+import { SectionHeader } from "@/components/section-header";
+import { formatAssetSpec } from "@/lib/asset-spec";
+import {
+  computeMarketSnapshot,
+  computePortfolioMetrics,
+  type PriceTick,
+} from "@/lib/market-stats";
 
-const demoData = [
-  { date: "05-01", open: 1200, high: 1250, low: 1180, close: 1220 },
-  { date: "05-02", open: 1220, high: 1230, low: 1150, close: 1160 },
-  { date: "05-03", open: 1160, high: 1180, low: 1100, close: 1110 },
-  { date: "05-04", open: 1110, high: 1120, low: 1050, close: 1060 },
-  { date: "05-05", open: 1060, high: 1080, low: 1020, close: 1040 },
-];
+export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+function toPriceTicks(
+  prices: Array<{
+    platform: string;
+    tradeType: string;
+    price: number;
+    capturedDate: string;
+  }>,
+): PriceTick[] {
+  return prices.map((p) => ({
+    platform: p.platform,
+    tradeType: p.tradeType,
+    price: p.price,
+    capturedDate: p.capturedDate,
+  }));
+}
+
+export default async function HomePage() {
+  let dbError: string | null = null;
+  let assetRows: AssetListRow[] = [];
+  let portfolioMetrics = null;
+  let holdingCount = 0;
+
+  try {
+    let heldAssetKeys = new Set<string>();
+
+    try {
+      heldAssetKeys = new Set(
+        (await prisma.holding.findMany({ select: { assetKey: true } })).map(
+          (h) => h.assetKey,
+        ),
+      );
+      holdingCount = heldAssetKeys.size;
+    } catch (holdingError) {
+      console.warn("[home] Holding 表不可用，跳过持仓摘要:", holdingError);
+    }
+
+    const assets = await prisma.standardAsset.findMany({
+      where: { isMonitoring: true },
+      include: {
+        prices: {
+          orderBy: { capturedAt: "desc" },
+          select: {
+            platform: true,
+            tradeType: true,
+            price: true,
+            capturedDate: true,
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    assetRows = assets.map((asset) => {
+      const ticks = toPriceTicks(asset.prices);
+      return {
+        assetKey: asset.assetKey,
+        name: asset.name,
+        imageUrl: asset.imageUrl,
+        category: asset.category,
+        spec: formatAssetSpec(asset),
+        isHeld: heldAssetKeys.has(asset.assetKey),
+        priceCount: asset.prices.length,
+        market: computeMarketSnapshot(ticks),
+      };
+    });
+
+    if (holdingCount > 0) {
+      try {
+        const holdings = await prisma.holding.findMany({
+          include: {
+            asset: {
+              include: {
+                prices: {
+                  orderBy: { capturedAt: "desc" },
+                  select: {
+                    platform: true,
+                    tradeType: true,
+                    price: true,
+                    capturedDate: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        portfolioMetrics = computePortfolioMetrics(
+          holdings.map((h) => ({
+            quantity: h.quantity,
+            avgCost: h.avgCost,
+            latestAvg: computeMarketSnapshot(toPriceTicks(h.asset.prices))
+              .latestAvg,
+          })),
+        );
+      } catch (holdingError) {
+        console.warn("[home] 持仓聚合失败:", holdingError);
+      }
+    }
+  } catch (error) {
+    dbError =
+      error instanceof Error
+        ? error.message
+        : "数据库连接失败，请检查 .env 中的 DATABASE_URL";
+  }
+
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-50">
-      <header className="border-b border-zinc-800 px-6 py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-emerald-400">
-              EveryAsset-KLine
-            </p>
-            <h1 className="text-xl font-semibold">万物皆可K线</h1>
-          </div>
-          <Link
-            href="/dashboard"
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500"
-          >
-            进入看板
-          </Link>
+      <header className="border-b border-zinc-800 px-6 py-5">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-[14px] uppercase tracking-widest text-emerald-400">
+            EveryAsset-KLine
+          </p>
+          <h1 className="mt-1.5 text-[23px] font-semibold">万物皆可K线</h1>
+          <p className="mt-1 text-[14px] text-zinc-500">
+            点击资产行进入独立散点趋势页
+          </p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10">
-        <section className="mb-10 grid gap-6 md:grid-cols-3">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <p className="text-sm text-emerald-400">StandardAsset</p>
-            <p className="mt-2 font-medium">标准资产池 — 跨平台同款卡牌聚合</p>
+      <main className="mx-auto max-w-6xl space-y-10 px-6 py-8">
+        {dbError && (
+          <div className="rounded-lg border border-amber-700/50 bg-amber-950/40 px-4 py-3.5 text-[16px] text-amber-200">
+            {dbError}
           </div>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <p className="text-sm text-sky-400">AssetChannel · WEB</p>
-            <p className="mt-2 font-medium">卡淘/卡乐列表页扫描，自动匹配结标与地板价</p>
-          </div>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <p className="text-sm text-violet-400">AssetChannel · VISION_AI</p>
-            <p className="mt-2 font-medium">集换社/闲鱼 — AI 视觉外挂预留</p>
-          </div>
-        </section>
+        )}
 
-        <section>
-          <h2 className="mb-4 text-lg font-medium">K 线预览（Demo 数据）</h2>
-          <KLineChart data={demoData} targetPrice={1100} title="示例：日版奇树 SAR" />
+        <PortfolioSummary
+          metrics={portfolioMetrics}
+          holdingCount={holdingCount}
+        />
+
+        <section className="space-y-4">
+          <SectionHeader
+            label="Assets"
+            title="监控资产列表"
+            description="每张卡对应独立散点图 · 大盘行情与个人持仓分离"
+            labelTone="sky"
+            trailing={
+              <span className="rounded-full bg-zinc-800 px-3.5 py-1.5 text-[14px] text-zinc-400">
+                {assetRows.length} 张
+              </span>
+            }
+          />
+
+          <AssetList rows={assetRows} />
         </section>
       </main>
     </div>

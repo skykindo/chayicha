@@ -1,5 +1,8 @@
 import type { StandardAsset, AssetChannel } from "@everyasset/db";
-import { buildGradeLabel, matchesGradeSpec } from "@everyasset/db";
+import {
+  buildGradeLabel,
+  parseCardCondition,
+} from "@everyasset/db";
 import { matchesAsset } from "../../utils/match-asset.js";
 import type { ListItem } from "../types.js";
 
@@ -11,6 +14,10 @@ type SellOrderRow = {
   rate_score?: string | null;
   rate_score_display?: string | null;
   display_status?: string;
+  order_deal_on?: string | null;
+  bid_count?: number | null;
+  bidder_count?: number | null;
+  watch_count?: number | null;
 };
 
 type SellOrderResponse = {
@@ -30,8 +37,7 @@ export function extractPokecolorTurnoverCardId(url: string): string | null {
 }
 
 /**
- * 卡乐 turnover 页（如 id=239864 超级快龙 ex）走公开 JSON API，
- * 无需 H5 登录。含 rate_type / rate_score_display 结构化评级字段。
+ * 卡乐 turnover 公开 JSON API — 全量成交记录入库
  */
 export async function scrapePokecolorTurnoverApi(
   cardId: string,
@@ -71,7 +77,7 @@ export async function scrapePokecolorTurnoverApi(
         row.rate_score,
       );
 
-      if (!matchesGradeSpec(asset, gradeLabel)) continue;
+      const cardCondition = parseCardCondition(title, gradeLabel);
 
       const tradeType: ListItem["tradeType"] =
         row.sell_mode_category === "bid" ||
@@ -79,11 +85,21 @@ export async function scrapePokecolorTurnoverApi(
           ? "AUCTION"
           : "FLOOR";
 
+      const capturedAt = row.order_deal_on
+        ? new Date(row.order_deal_on)
+        : undefined;
+
       items.push({
         title,
         price,
         tradeType,
+        cardCondition,
         gradeLabel,
+        bidCount: row.bid_count ?? null,
+        bidderCount: row.bidder_count ?? null,
+        watchCount: row.watch_count ?? null,
+        isDelayed: false,
+        capturedAt,
         info: `[POKECOLOR/API] ${gradeLabel} ${title.slice(0, 60)}`,
       });
     }
@@ -92,14 +108,13 @@ export async function scrapePokecolorTurnoverApi(
     page += 1;
   }
 
-  return pickLatestPerTradeType(items);
+  return dedupeItems(items);
 }
 
-/** turnover API 为成交记录，同 tradeType 取最近一条（API 已按成交时间倒序） */
-function pickLatestPerTradeType(items: ListItem[]) {
+function dedupeItems(items: ListItem[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
-    const key = item.tradeType;
+    const key = `${item.tradeType}:${item.price}:${item.cardCondition}:${item.title.slice(0, 40)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

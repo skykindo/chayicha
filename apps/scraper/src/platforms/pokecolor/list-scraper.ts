@@ -1,8 +1,16 @@
 import type { Page } from "playwright";
-import type { StandardAsset, AssetChannel } from "@everyasset/db";
-import { parseGradeLabelFromTitle } from "@everyasset/db";
+import {
+  parseCardCondition,
+  parseGradeLabelFromTitle,
+  type StandardAsset,
+  type AssetChannel,
+} from "@everyasset/db";
 import { matchesAsset } from "../../utils/match-asset.js";
 import { scrollAndLoadMore } from "../../utils/load-more.js";
+import {
+  parseCapturedDateFromText,
+  parseSentimentFromText,
+} from "../../utils/parse-sentiment.js";
 import { parseMoney } from "../../utils/parse-price.js";
 import type { ListItem } from "../types.js";
 import {
@@ -155,7 +163,10 @@ function collectByPattern(
       title,
       price,
       tradeType,
+      cardCondition: parseCardCondition(title, parseGradeLabelFromTitle(title)),
       gradeLabel: parseGradeLabelFromTitle(title) ?? "裸卡",
+      ...parseSentimentFromText(`${title}\n${bodyText}`),
+      capturedAt: parseCapturedDateFromText(`${title}\n${bodyText}`) ?? undefined,
       info: `[POKECOLOR/${tradeType}] ${title.slice(0, 80)}`,
     });
   }

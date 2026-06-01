@@ -1,18 +1,3 @@
-import type { GradingCompany } from "@prisma/client";
-
-export type GradeSpecFields = {
-  gradingCompany: GradingCompany;
-  gradeScore: string | null;
-};
-
-/** 标准资产配置的评级标签，如 PSA10 / CGC黑金10 / 裸卡 */
-export function formatAssetGradeLabel(asset: GradeSpecFields): string {
-  if (asset.gradingCompany === "RAW") return "裸卡";
-  const score = asset.gradeScore?.trim();
-  if (!score) return asset.gradingCompany;
-  return `${asset.gradingCompany}${score}`;
-}
-
 /** 从卡乐 API 或标题解析评级标签 */
 export function buildGradeLabel(
   rateType: string | null | undefined,
@@ -60,33 +45,39 @@ export function parseGradeLabelFromTitle(title: string): string | null {
   return null;
 }
 
-function normalizeGrade(label: string): string {
-  return label
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/分$/u, "")
-    .replace(/^RAW$/i, "裸卡");
-}
+export type CardCondition = "RAW" | "PSA10" | "PSA9" | "CGC10";
 
-/** 列表项评级是否匹配标准资产配置的评级 */
-export function matchesGradeSpec(
-  asset: GradeSpecFields,
-  listingGradeLabel: string,
-): boolean {
-  const expected = normalizeGrade(formatAssetGradeLabel(asset));
-  const actual = normalizeGrade(listingGradeLabel);
-
-  if (asset.gradingCompany === "RAW") {
-    return actual === "裸卡" || actual === "RAW";
-  }
-
-  return actual === expected || actual.includes(expected) || expected.includes(actual);
-}
-
-export const GRADING_COMPANY_LABELS: Record<GradingCompany, string> = {
+export const CARD_CONDITION_LABELS: Record<CardCondition, string> = {
   RAW: "裸卡",
-  PSA: "PSA",
-  CGC: "CGC",
-  BGS: "BGS",
-  OTHER: "其他",
+  PSA10: "PSA 10",
+  PSA9: "PSA 9",
+  CGC10: "CGC 10",
 };
+
+/** 将标题/评级标签归一化为标准 cardCondition 枚举 */
+export function parseCardCondition(
+  title: string,
+  gradeLabel?: string | null,
+): CardCondition {
+  const label = (gradeLabel ?? parseGradeLabelFromTitle(title) ?? "裸卡")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
+  if (label === "裸卡" || label === "RAW") return "RAW";
+  if (/PSA10|^PSA\s*10$/.test(label)) return "PSA10";
+  if (/PSA9|^PSA\s*9$/.test(label)) return "PSA9";
+  if (/CGC10|CGC黑金10|CGC金10/.test(label)) return "CGC10";
+
+  if (/PSA/.test(label) && /10/.test(label)) return "PSA10";
+  if (/PSA/.test(label) && /9/.test(label)) return "PSA9";
+  if (/CGC/.test(label) && /10/.test(label)) return "CGC10";
+
+  return "RAW";
+}
+
+export function formatCardConditionLabel(condition: string): string {
+  return (
+    CARD_CONDITION_LABELS[condition as CardCondition] ??
+    condition
+  );
+}

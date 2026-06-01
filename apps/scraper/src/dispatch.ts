@@ -1,5 +1,11 @@
 import type { BrowserContext } from "playwright";
-import { Platform, TrackType, type AssetChannel, type StandardAsset } from "@everyasset/db";
+import {
+  Platform,
+  TrackType,
+  parseCardCondition,
+  type AssetChannel,
+  type StandardAsset,
+} from "@everyasset/db";
 import { scrapeKataoList } from "./platforms/katao/list-scraper.js";
 import { scrapePokecolorList } from "./platforms/pokecolor/list-scraper.js";
 import { runVisionChannel } from "./platforms/vision/index.js";
@@ -10,7 +16,7 @@ export async function dispatchChannel(
   asset: StandardAsset,
   channel: AssetChannel,
 ): Promise<number> {
-  if (channel.trackType === TrackType.VISION_AI) {
+  if (channel.trackType === TrackType.VISION) {
     return runVisionChannel(channel, asset);
   }
 
@@ -23,9 +29,26 @@ export async function dispatchChannel(
     throw new Error("WEB 轨道需要 Playwright 浏览器上下文");
   }
 
-  if (!channel.sourceUrl && !channel.sourceUrlAuction) {
+  if (
+    channel.platform !== Platform.KATAO &&
+    channel.platform !== Platform.POKECOLOR &&
+    !channel.sourceUrl &&
+    !channel.sourceUrlAuction
+  ) {
     console.warn(
-      `[dispatch] ${asset.name} / ${channel.platform} — WEB 渠道缺少 sourceUrl / sourceUrlAuction`,
+      `[dispatch] ${asset.name} / ${channel.platform} — WEB 渠道缺少 sourceUrl`,
+    );
+    return 0;
+  }
+
+  if (
+    (channel.platform === Platform.KATAO ||
+      channel.platform === Platform.POKECOLOR) &&
+    !channel.sourceUrl &&
+    !channel.sourceUrlAuction
+  ) {
+    console.warn(
+      `[dispatch] ${asset.name} / ${channel.platform} — 缺少历史成交列表页 URL`,
     );
     return 0;
   }
@@ -44,17 +67,30 @@ export async function dispatchChannel(
     }
 
     for (const item of items) {
+      const cardCondition =
+        item.cardCondition ??
+        parseCardCondition(item.title, item.gradeLabel ?? null);
+
       await upsertPriceStream({
-        assetId: asset.id,
+        assetKey: asset.assetKey,
         platform: channel.platform,
         tradeType: item.tradeType,
-        gradeLabel: item.gradeLabel ?? null,
+        cardCondition,
         price: item.price,
         info: item.info ?? item.title.slice(0, 120),
+        bidCount: item.bidCount,
+        bidderCount: item.bidderCount,
+        watchCount: item.watchCount,
+        isDelayed: item.isDelayed,
+        capturedAt: item.capturedAt,
       });
       written += 1;
+      const sentiment =
+        item.bidCount != null
+          ? ` | 出价${item.bidCount}次/${item.bidderCount ?? "?"}人`
+          : "";
       console.log(
-        `[dispatch] ✓ ${asset.name} / ${channel.platform} / ${item.tradeType}${item.gradeLabel ? ` / ${item.gradeLabel}` : ""} — ¥${item.price} ← ${item.title.slice(0, 40)}…`,
+        `[dispatch] ✓ ${asset.name} / ${channel.platform} / ${item.tradeType} / ${cardCondition} — ¥${item.price}${sentiment} ← ${item.title.slice(0, 40)}…`,
       );
     }
   } finally {
@@ -76,7 +112,12 @@ async function scrapeListByPlatform(
       return scrapePokecolorList(page, channel, asset);
     case Platform.JIHUANSHE:
       console.log(
-        `[dispatch] ${channel.platform} WEB 列表解析待实现，请使用 trackType=VISION_AI`,
+        `[dispatch] ${channel.platform} WEB 列表解析待实现，请使用 trackType=VISION`,
+      );
+      return [];
+    case Platform.IDLEFISH:
+      console.log(
+        `[dispatch] ${channel.platform} — 请配置 trackType=VISION 走 AI 视觉轨`,
       );
       return [];
     default: {

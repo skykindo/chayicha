@@ -5,6 +5,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   JIHUANSHE: "集换社",
   POKECOLOR: "卡乐",
   KATAO: "卡淘",
+  IDLEFISH: "闲鱼",
 };
 
 export function formatPlatformLabel(platform: Platform): string {
