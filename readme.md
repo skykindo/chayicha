@@ -72,4 +72,6 @@ model PriceHistory {
 | 渠道 | `AssetChannel` | JIHUANSHE/POKECOLOR/KATAO + WEB/VISION_AI |
 | 流水 | `PriceStream` | 多平台多交易类型天级去重 |
 
-迁移步骤见 [docs/MIGRATION.md](./docs/MIGRATION.md)。
+迁移步骤见 [docs/MIGRATION.md](./docs/MIGRATION.md)。  
+日常命令速查见 [docs/NPM-COMMANDS.md](./docs/NPM-COMMANDS.md)。  
+**WEB / VISION 渠道分开维护**见 [docs/CHANNELS.md](./docs/CHANNELS.md)。

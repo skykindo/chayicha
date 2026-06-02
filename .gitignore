@@ -17,7 +17,8 @@ build/
 # Prisma
 packages/db/generated/
 
-# Playwright
+# Playwright / 爬虫断点
+apps/scraper/checkpoint.json
 apps/scraper/test-results/
 apps/scraper/playwright-report/
 apps/scraper/blob-report/
@@ -42,3 +43,8 @@ next-env.d.ts
 
 # Testing
 coverage/
+
+# VISION track (本机坐标 / 断点 / 截图)
+apps/vision/layout.json
+apps/vision/checkpoint.json
+apps/vision/screenshots/

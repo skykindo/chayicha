@@ -6,9 +6,15 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../../.env")
 
 import { prisma, TrackType } from "@everyasset/db";
 import { createBrowserContext } from "./browser.js";
+import { resetCheckpoint } from "./checkpoint.js";
 import { runScrapeQueue } from "./queue.js";
 
 async function main() {
+  if (process.argv.includes("--reset-checkpoint")) {
+    resetCheckpoint();
+    console.log("[scraper] 已清空 checkpoint.json，将从第 1 张开始");
+  }
+
   console.log("[scraper] 万物皆可K线 — 标准资产池调度启动");
 
   const assets = await prisma.standardAsset.findMany({

@@ -1,0 +1,17 @@
+{
+  "_comment": "VISION 轨道可调参数；修改后重启 python apps/vision/main.py 生效",
+  "maxLimit": 50,
+  "platform": "JIHUANSHE",
+  "trackType": "VISION",
+  "sleepAfterCardMinSec": 6,
+  "sleepAfterCardMaxSec": 12,
+  "pageLoadWaitSec": 2.5,
+  "windowPosition": [0, 0],
+  "geminiModel": "gemini-2.5-flash",
+  "geminiMinIntervalSec": 13,
+  "paths": {
+    "layout": "layout.json",
+    "checkpoint": "checkpoint.json",
+    "screenshotsDir": "screenshots"
+  }
+}

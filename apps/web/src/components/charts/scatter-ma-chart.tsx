@@ -397,7 +397,8 @@ export function ScatterMaChart({ points, title }: ScatterMaChartProps) {
         (p) =>
           conditions.has(p.cardCondition) &&
           platforms.has(p.platform) &&
-          tradeTypes.has(p.tradeType),
+          tradeTypes.has(p.tradeType) &&
+          !p.info?.includes("集换价"),
       ),
     [timeFiltered, conditions, platforms, tradeTypes],
   );

@@ -17,7 +17,14 @@
     "scraper": "npm run start --workspace=@everyasset/scraper",
     "scraper:dev": "npm run dev --workspace=@everyasset/scraper",
     "scraper:browser": "npm run browser:install --workspace=@everyasset/scraper",
-    "scraper:test": "npm run test:url --workspace=@everyasset/scraper"
+    "scraper:test": "npm run test:url --workspace=@everyasset/scraper",
+    "scraper:progress": "npx tsx scripts/check-scraper-progress.ts",
+    "vision": "python apps/vision/main.py",
+    "vision:list": "python apps/vision/main.py --list",
+    "vision:import": "npx tsx scripts/import-vision-channels.ts",
+    "vision:export": "npx tsx scripts/export-vision-channels.ts",
+    "web:import": "npx tsx scripts/import-web-channels.ts",
+    "web:export": "npx tsx scripts/export-web-channels.ts"
   },
   "engines": {
     "node": ">=18.17.0"
