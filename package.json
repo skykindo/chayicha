@@ -20,6 +20,7 @@
     "scraper:test": "npm run test:url --workspace=@everyasset/scraper",
     "scraper:progress": "npx tsx scripts/check-scraper-progress.ts",
     "vision": "python apps/vision/main.py",
+    "vision:calibrate": "python apps/vision/calibrate_layout.py",
     "vision:list": "python apps/vision/main.py --list",
     "vision:import": "npx tsx scripts/import-vision-channels.ts",
     "vision:export": "npx tsx scripts/export-vision-channels.ts",

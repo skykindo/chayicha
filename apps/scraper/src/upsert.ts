@@ -24,7 +24,7 @@ export async function upsertPriceStream(input: StreamInput) {
 
   return prisma.priceStream.upsert({
     where: {
-      assetKey_platform_tradeType_price_capturedDate_cardCondition_info: {
+      assetKey_platform_tradeType_price_capturedDate_cardCondition_info_dealSeq: {
         assetKey: input.assetKey,
         platform: input.platform,
         tradeType: input.tradeType,
@@ -32,6 +32,7 @@ export async function upsertPriceStream(input: StreamInput) {
         capturedDate,
         cardCondition,
         info,
+        dealSeq: 0,
       },
     },
     create: {
@@ -47,6 +48,7 @@ export async function upsertPriceStream(input: StreamInput) {
       isDelayed: input.isDelayed ?? false,
       capturedAt,
       capturedDate,
+      dealSeq: 0,
     },
     update: {
       bidCount: input.bidCount ?? null,

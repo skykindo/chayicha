@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import time
 from pathlib import Path
@@ -11,46 +10,19 @@ import google.generativeai as genai
 from PIL import Image
 
 from config import VisionConfig
-
-FLOOR_PROMPT = """你是集换社小程序「一口价」页签的价格识别助手。
-请从截图中提取可见价格，只输出 JSON，不要 Markdown 代码块，不要解释。
-
-输出格式：
-{"items": [
-  {"price": 数字或null, "tradeType": "FLOOR", "cardCondition": "RAW", "priceKind": "最低价"},
-  {"price": 数字或null, "tradeType": "FLOOR", "cardCondition": "PSA10", "priceKind": "集换价"}
-]}
-
-规则：
-- 找不到对应价格时 price 为 null
-- 不要猜测；看不清就 null
-- priceKind 只能是「最低价」或「集换价」
-"""
-
-AUCTION_PROMPT = """你是集换社小程序「竞价」页签的价格识别助手。
-请从截图中提取可见价格，只输出 JSON，不要 Markdown 代码块，不要解释。
-
-输出格式：
-{"items": [
-  {"price": 数字或null, "tradeType": "AUCTION", "cardCondition": "PSA10", "priceKind": "当前竞价"},
-  {"price": 数字或null, "tradeType": "AUCTION", "cardCondition": "PSA10", "priceKind": "成交价"}
-]}
-
-规则：
-- 找不到对应价格时 price 为 null
-- 不要猜测；看不清就 null
-- priceKind 只能是「当前竞价」或「成交价」
-"""
+from vision_prompts import (
+    AUCTION_PROMPT,
+    AUCTION_SCROLL_PROMPT,
+    CARD_LABEL_PROMPT,
+    DETAIL_ENTRY_PROMPT,
+    FLOOR_PROMPT,
+    PRODUCT_PROMPT,
+    WISHLIST_SCAN_PROMPT,
+    extract_json,
+    parse_items_response,
+)
 
 _last_gemini_call_at: float = 0.0
-
-
-def _extract_json(text: str) -> dict:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    return json.loads(text)
 
 
 def _configure(cfg: VisionConfig) -> None:
@@ -62,6 +34,11 @@ def _configure(cfg: VisionConfig) -> None:
 def _is_rate_limited(exc: Exception) -> bool:
     msg = str(exc).lower()
     return "429" in msg or "resourceexhausted" in type(exc).__name__.lower() or "quota" in msg
+
+
+def _is_daily_quota_exhausted(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "free_tier" in msg or "free tier" in msg
 
 
 def _retry_delay_sec(exc: Exception, attempt: int) -> float:
@@ -76,16 +53,17 @@ def _wait_interval(cfg: VisionConfig) -> None:
     if _last_gemini_call_at <= 0:
         return
     elapsed = time.time() - _last_gemini_call_at
-    wait = cfg.gemini_min_interval_sec - elapsed
+    wait = cfg.vision_min_interval_sec - elapsed
     if wait > 0:
-        print(f"[gemini] 免费档限流间隔，等待 {wait:.0f}s …", flush=True)
+        print(f"[gemini] 请求间隔，等待 {wait:.0f}s …", flush=True)
         time.sleep(wait)
 
 
 def _generate_with_retry(model: genai.GenerativeModel, content: list, cfg: VisionConfig):
     global _last_gemini_call_at
     last_exc: Exception | None = None
-    for attempt in range(5):
+    max_retries = max(1, cfg.vision_max_retries)
+    for attempt in range(max_retries):
         _wait_interval(cfg)
         try:
             response = model.generate_content(content, request_options={"timeout": 120})
@@ -95,9 +73,15 @@ def _generate_with_retry(model: genai.GenerativeModel, content: list, cfg: Visio
             if not _is_rate_limited(exc):
                 raise
             last_exc = exc
+            if _is_daily_quota_exhausted(exc):
+                raise RuntimeError(
+                    "Gemini 免费档今日请求次数已用尽（约 20 次/天）。"
+                    "请明天再跑 npm run vision，或开通 Gemini 付费 API。"
+                    f"原始错误: {exc}"
+                ) from exc
             delay = _retry_delay_sec(exc, attempt)
             print(
-                f"[gemini] 429 配额/频率超限，{delay:.0f}s 后重试 ({attempt + 1}/5) …",
+                f"[gemini] 429 配额/频率超限，{delay:.0f}s 后重试 ({attempt + 1}/{max_retries}) …",
                 flush=True,
             )
             time.sleep(delay)
@@ -105,36 +89,109 @@ def _generate_with_retry(model: genai.GenerativeModel, content: list, cfg: Visio
 
 
 def parse_screenshot(cfg: VisionConfig, image_path: Path, *, tab: str) -> list[dict]:
-    if cfg.mock_gemini:
-        if tab == "floor":
-            return [
-                {"price": 520.0, "tradeType": "FLOOR", "cardCondition": "RAW", "priceKind": "最低价"},
-                {"price": None, "tradeType": "FLOOR", "cardCondition": "PSA10", "priceKind": "集换价"},
-            ]
-        return [
-            {"price": 750.0, "tradeType": "AUCTION", "cardCondition": "PSA10", "priceKind": "当前竞价"},
-            {"price": None, "tradeType": "AUCTION", "cardCondition": "PSA10", "priceKind": "成交价"},
-        ]
-
     _configure(cfg)
     model = genai.GenerativeModel(cfg.gemini_model)
-    prompt = FLOOR_PROMPT if tab == "floor" else AUCTION_PROMPT
+    if tab == "floor":
+        prompt = FLOOR_PROMPT
+        tab_label = "一口价"
+    elif tab == "auction":
+        prompt = AUCTION_PROMPT
+        tab_label = "竞价"
+    else:
+        prompt = PRODUCT_PROMPT
+        tab_label = "商品"
     image = Image.open(image_path)
-
-    tab_label = "一口价" if tab == "floor" else "竞价"
-    print(
-        f"[gemini] 请求中 ({tab_label}, {cfg.gemini_model}) … "
-        f"免费档约 5 次/分钟，请耐心等待",
-        flush=True,
-    )
+    print(f"[gemini] 请求中 ({tab_label}, {cfg.gemini_model}) …", flush=True)
 
     response = _generate_with_retry(model, [prompt, image], cfg)
     text = (response.text or "").strip()
     if not text:
         raise RuntimeError(f"Gemini 返回空内容: {image_path}")
 
-    data = _extract_json(text)
+    data = extract_json(text)
     items = data.get("items")
     if not isinstance(items, list):
         raise RuntimeError(f"Gemini JSON 缺少 items 数组: {text[:200]}")
+    if tab == "product":
+        card_name = data.get("cardName")
+        if card_name is not None:
+            card_name = str(card_name).strip() or None
+        return items, card_name
     return items
+
+
+def parse_detail_entry(
+    cfg: VisionConfig, image_path: Path
+) -> tuple[str | None, str | None, str | None, list[dict]]:
+    _configure(cfg)
+    model = genai.GenerativeModel(cfg.gemini_model)
+    image = Image.open(image_path)
+    print("[gemini] 请求中 (详情首屏 set/编号+一口价) …", flush=True)
+    response = _generate_with_retry(model, [DETAIL_ENTRY_PROMPT, image], cfg)
+    text = (response.text or "").strip()
+    if not text:
+        raise RuntimeError(f"Gemini 返回空内容: {image_path}")
+
+    data = extract_json(text)
+    card_name = data.get("cardName")
+    series = data.get("series")
+    card_number = data.get("cardNumber")
+    if card_name is not None:
+        card_name = str(card_name).strip() or None
+    if series is not None:
+        series = str(series).strip() or None
+    if card_number is not None:
+        card_number = str(card_number).strip() or None
+    items = data.get("items")
+    if not isinstance(items, list):
+        raise RuntimeError(f"Gemini JSON 缺少 items 数组: {text[:200]}")
+    return series, card_number, card_name, items
+
+
+def parse_auction_scroll(cfg: VisionConfig, image_path: Path) -> list[dict]:
+    _configure(cfg)
+    model = genai.GenerativeModel(cfg.gemini_model)
+    image = Image.open(image_path)
+    print("[gemini] 请求中 (竞价最近成交下滚) …", flush=True)
+    response = _generate_with_retry(model, [AUCTION_SCROLL_PROMPT, image], cfg)
+    text = (response.text or "").strip()
+    if not text:
+        raise RuntimeError(f"Gemini 返回空内容: {image_path}")
+    return parse_items_response(text)
+
+
+def parse_card_label(cfg: VisionConfig, image_path: Path) -> tuple[str | None, str | None]:
+    _configure(cfg)
+    model = genai.GenerativeModel(cfg.gemini_model)
+    image = Image.open(image_path)
+    print("[gemini] 请求中 (商品页编号区) …", flush=True)
+    response = _generate_with_retry(model, [CARD_LABEL_PROMPT, image], cfg)
+    text = (response.text or "").strip()
+    if not text:
+        raise RuntimeError(f"Gemini 返回空内容: {image_path}")
+
+    data = extract_json(text)
+    series = data.get("series")
+    card_number = data.get("cardNumber")
+    if series is not None:
+        series = str(series).strip() or None
+    if card_number is not None:
+        card_number = str(card_number).strip() or None
+    return series, card_number
+
+
+def parse_wishlist_list(cfg: VisionConfig, image_path: Path) -> list[dict]:
+    _configure(cfg)
+    model = genai.GenerativeModel(cfg.gemini_model)
+    image = Image.open(image_path)
+    print("[gemini] 请求中 (心愿单列表扫描) …", flush=True)
+    response = _generate_with_retry(model, [WISHLIST_SCAN_PROMPT, image], cfg)
+    text = (response.text or "").strip()
+    if not text:
+        raise RuntimeError(f"Gemini 返回空内容: {image_path}")
+
+    data = extract_json(text)
+    cards = data.get("cards")
+    if not isinstance(cards, list):
+        raise RuntimeError(f"Gemini JSON 缺少 cards 数组: {text[:200]}")
+    return cards

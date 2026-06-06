@@ -46,15 +46,23 @@ PTCG-JA-s8a-p-001/025-Promo,WEB,POKECOLOR,https://pokecolor.cn/h5/pages-collecti
 | `sourceUrlAuction` | 拍卖列表页（可选） |
 | `searchKeyword` | 标题匹配词（可选） |
 
-### vision-channels.csv（6 列）
+### vision-channels.csv（7 列，心愿单模式建议带 gridSlot）
 
 ```csv
-assetKey,trackType,platform,sourceUrl,sourceUrlAuction,searchKeyword
-PTCG-JA-M2a-236/193-SAR,VISION,JIHUANSHE,,,
+assetKey,trackType,platform,sourceUrl,sourceUrlAuction,searchKeyword,gridSlot
+PTCG-JA-s8a-p-010/025-Promo,VISION,JIHUANSHE,,,,1
 ```
 
 | 字段 | 填法 |
 |------|------|
+| `gridSlot` | **心愿单专用**：该卡在 4×3 网格中的位置 **1～12**（`grid_01`～`grid_12`）。**与 CSV 第几行无关**；心愿单增删卡后只改 `gridSlot` + 坐标，行顺序可乱 |
+
+**心愿单维护（不必与 CSV 行序一致）：**
+
+1. 在 App 心愿单里增删卡后，看每张卡在第几格（左上=1，向右递增，换行继续）。
+2. 在 CSV 为该 `assetKey` 填写对应 `gridSlot`；新卡加一行，删卡删行后 `npm run vision:import -- --sync`。
+3. `npm run vision:list` 核对「卡名 ↔ grid_0N」是否与屏幕一致。
+4. `layout.json` 的 `grid_01`～`grid_12` 是屏幕坐标，与 `gridSlot` 数字对应，不随 CSV 行移动。
 | `assetKey` | 必填，须已在 `卡牌-import.csv` |
 | `trackType` | 固定 `VISION` |
 | `platform` | 固定 `JIHUANSHE` |

@@ -1,31 +1,70 @@
 {
-  "_comment": "安卓模拟器 + 集换社 App；窗口左上角 (0,0)；points 为 [x,y] 屏幕像素",
-  "_client推荐": "推荐模拟器 APK；PC 微信小程序无盒内搜卡",
-  "windowTitleKeyword": "雷电",
-  "_windowTitleKeyword说明": "模拟器窗口标题关键字：雷电 / MuMu / 夜神 / 集换社 等（Alt+Tab 确认）",
-  "points": {
-    "global_search": [120, 60],
-    "series_button": [200, 120],
-    "box_result_first": [200, 180],
-    "inner_search": [120, 90],
-    "card_result_first": [200, 220],
-    "tab_floor": [280, 110],
-    "tab_auction": [360, 110]
-  },
-  "points说明": {
-    "global_search": "全局搜索框 — 点击后粘贴卡盒系列名（series）并回车",
-    "series_button": "系列按钮 — 全局搜索提交后，点「系列」筛选",
-    "box_result_first": "卡盒列表第一条 — 点系列后出现，进入该卡盒",
-    "inner_search": "卡盒内搜索框 — 粘贴卡牌编号（cardNumber）并回车",
-    "card_result_first": "卡牌列表第一条 — 进入该张卡详情页",
-    "tab_floor": "一口价页签",
-    "tab_auction": "竞价页签"
-  },
-  "screenshotRegion": {
-    "x": 0,
-    "y": 140,
-    "width": 420,
-    "height": 640
-  },
-  "screenshotRegion说明": "详情页截图区域：左上角 (x,y)，宽 width、高 height，用于 Gemini 识价"
+  "_comment": "复制为 layout.json；多机位坐标放在 profiles 下",
+  "_profiles说明": "vision.config.json → layoutProfile 或 .env → VISION_LAYOUT_PROFILE 选择机位",
+  "activeProfile": "笔记本",
+  "profiles": {
+    "笔记本": {
+      "windowTitleKeyword": "微信",
+      "wishlistPageScan": {
+        "cols": 4,
+        "rows": 3,
+        "slotsPerPage": 12,
+        "pageClickSlots": [],
+        "scrollCenter": [200, 500],
+        "scrollOnePageSteps": 8.5,
+        "scrollOnePageClicksPerStep": -1,
+        "scrollOnePageRows": 3,
+        "minRowsOnScreen": 3
+      },
+      "points": {
+        "card_info": [200, 500],
+        "product_tab": [280, 500],
+        "tab_auction": [360, 500],
+        "tab_recent_deals": [440, 500],
+        "back_button": [40, 80]
+      },
+      "productPage": {
+        "auctionScrollCenter": [200, 600],
+        "auctionScrollClicks": -2,
+        "auctionScrollClicksPerStep": -4
+      },
+      "screenshotRegion": {
+        "x": 0,
+        "y": 140,
+        "width": 420,
+        "height": 640
+      }
+    },
+    "台式机": {
+      "_comment": "示例：第二台电脑复制笔记本一组后改坐标",
+      "windowTitleKeyword": "微信",
+      "wishlistPageScan": {
+        "cols": 4,
+        "rows": 3,
+        "slotsPerPage": 12,
+        "pageClickSlots": [],
+        "scrollCenter": [200, 500],
+        "scrollOnePageSteps": 8.5,
+        "scrollOnePageClicksPerStep": -1
+      },
+      "points": {
+        "card_info": [200, 500],
+        "product_tab": [280, 500],
+        "tab_auction": [360, 500],
+        "tab_recent_deals": [440, 500],
+        "back_button": [40, 80]
+      },
+      "productPage": {
+        "auctionScrollCenter": [200, 600],
+        "auctionScrollClicks": -2,
+        "auctionScrollClicksPerStep": -4
+      },
+      "screenshotRegion": {
+        "x": 0,
+        "y": 140,
+        "width": 420,
+        "height": 640
+      }
+    }
+  }
 }

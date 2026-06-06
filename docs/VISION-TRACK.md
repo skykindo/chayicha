@@ -173,22 +173,95 @@ LIMIT 50;
 
 ### 4.2 单卡完整 RPA 流程
 
-```
-[前置] 打开安卓模拟器 → 启动集换社 App（已登录）→ 停在可全局搜索的首页
+**心愿单整页扫描**（`vision.config.json` → `"navigationMode": "wishlist_page_scan"`，**当前默认**）：
 
-对每个 AssetChannel（最多 50 条）：
-
-  1. pygetwindow 定位模拟器/App 窗口 → 移动到 (0, 0)
-  2. 全局搜索：粘贴「卡盒名」(series) → 回车 → 等待 2~3s
-  3. 点击「系列」筛选按钮 (series_button) → 等待 2~3s
-  4. 点击卡盒列表第一条 (box_result_first) → 进入卡盒
-  5. 盒内搜索：粘贴「编号」(cardNumber) → 回车 → 等待 2~3s
-  6. 点击卡牌第一条 → 进入详情页
-  7. 点击「一口价」Tab → 截图 → floor.png
-  8. 点击「竞价」Tab   → 截图 → auction.png
-  9. Gemini 解析 → upsert PriceStream
- 10. 随机休眠 6~12s → checkpoint → 下一张
 ```
+[前置] 页面已停在心愿单；DB 渠道须有 series + cardNumber，无需 gridSlot
+
+  1. 滚到列表顶部
+  2. 每屏 12 格：点进 → 卡牌信息 → 商品 → 截 `productPage.labelRect` 读编号 → 匹配渠道
+  3. 命中：编号校验 → 下翻 2 页 → 截价区 → 入库 → 返回；未命中则返回跳过
+  4. 12 格扫完：下翻一整页（3 行，scrollOnePageClicks）→ 重复直到滑不动或渠道找齐
+```
+
+**心愿单固定格位**（`"navigationMode": "wishlist"`）：
+
+```
+[前置] 页面已停在心愿单；`vision-channels.csv` 的 **gridSlot**（1～12）↔ `grid_01`～`grid_12`，与 CSV 行序无关
+
+  1. 点 grid_N（该张卡在网格中的中心）
+  2. 点「卡牌信息」 card_info
+  3. 点「商品」 product_tab
+  4. 截 `productPage.labelRect`（或 `cellLabelRect`）→ Gemini 读 series + cardNumber → 与 CSV 校验
+  5. 商品页下翻 **2 页**（`productScrollPages` / `layout.productPage.scrollPages`）
+  6. 截 `screenshotRegion` → Gemini 识价 → upsert PriceStream
+  7. 点「返回」back_button（`wishlistBackClicks` 次）→ 回到心愿单
+  8. 休眠 15~25s → 下一张
+```
+
+**搜索模式**（`navigationMode": "search"`）见旧流程：全局搜系列 → 系列按钮 → 卡盒 → 盒内编号 → 一口价/竞价双截图。
+
+### 4.2.0 心愿单整页扫描（拟定，优先实现）
+
+**集换社限制：** 列表须 **满 3 行（12 格）** 才能翻页；不足 3 行滑不动。因此 **一滑 = 整页 3 行**，不是逐行滑。
+
+**规则：** 每屏 **4 列 × 3 行 = 12 格** 全部扫一遍（每格点进商品页读编号 → 匹配渠道 → 命中则采价）；然后滚 **一整页（3 行）**；重复直到滑不动。编号区仅在商品页，心愿单格上无 set/编号截图。
+
+`layout.json` → `wishlistPageScan`：
+
+| 字段 | 填法 |
+|------|------|
+| `pageClickSlots` | 长度 **12**，行优先，点进每格卡牌 |
+| `pageClickSlots` | 点进每格坐标（编号在商品页读，不在此截） |
+| `productPage.labelRect` | 商品页 set/编号区（扫描匹配用） |
+| `scrollCenter` | 滚轮中心 |
+| `scrollOnePageClicks` | 一次翻 **3 行** 的滚轮格数（负=向下） |
+| `scrollOnePageRows` / `minRowsOnScreen` | 固定 **3** |
+
+进商品后：截 `productPage.labelRect` → Gemini `series` + `cardNumber` → 匹配渠道 → 下翻 2 页 → 截 `screenshotRegion` 识价。
+
+### 4.2.1 心愿单三种导航模式（旧）
+
+| `navigationMode` | 适用 | CSV | 滑动 |
+|------------------|------|-----|------|
+| `wishlist` | 一屏 ≤12 张、位置固定 | 需要 **gridSlot** | 否 |
+| **`wishlist_scroll`** | 心愿单会增删、需滑动 | 只需 **assetKey**（用渠道 **name** 识图找卡） | 是 |
+| `search` | 模拟器/App 搜索 | series + cardNumber | 否 |
+
+**滑动模式流程：** 滚到顶部 → 截列表 → Gemini 认可见卡名+行列 → 匹配则点格中心 → 否则下滑再扫（`wishlistMaxScrollPages`）。入库前仍校验商品页 `cardName`。
+
+`layout.json` 增加：`wishlistListRegion`、`scrollCenter`；格距可由 `grid_01`/`grid_05` 自动推算。
+
+### 4.2.2 备选思路：收藏 / 心愿单（固定格位）
+
+**动机：** 把要监控的卡（≤50）事先放进集换社 **收藏** 或 **心愿单**，采集时不再走「全局搜系列 → 系列 → 卡盒 → 盒内搜编号」，避免小程序缺搜索、模拟器多步导航等问题。
+
+| 维度 | 搜索导航（§4.2 现行） | 收藏 / 心愿单 |
+|------|----------------------|---------------|
+| 人工维护 | `vision-channels.csv` + DB 渠道 | **App 内列表与 CSV 保持一致**（顺序或内容） |
+| RPA 步骤 | 多（搜盒、搜号） | 少（进列表 → 点行 → 详情截图） |
+| 滑动 | 一般不需要 | **超过一屏几乎必须** |
+| 识别「哪一行是哪张卡」 | 靠搜索命中第一条，较确定 | 需 **固定顺序** 或 **Gemini 识列表** |
+| 风控 | 搜索频繁 | 更像浏览收藏，可能更温和 |
+
+**推荐落地分三期：**
+
+1. **MVP（无滑动）**  
+   - 收藏/心愿单 **≤ 一屏**（例如 6 张），与 `vision-channels.csv` **条数、顺序一致**。  
+   - `layout.json` 增加：`wishlist_tab`（进列表）、`list_row_first` + `list_row_stride`（行高像素），或 6 个固定 `list_row_1`…`list_row_6`。  
+   - 流程：进列表 → 按行号点第 i 行 → 一口价/竞价截图 → 返回列表 → 下一张。
+
+2. **Phase B（滑动）**  
+   - 在列表区域中心 `scroll_center` 用滚轮/拖拽，每次滑动 `scroll_clicks`，最多 `max_scroll_pages`。  
+   - 每屏截图列表 region，Gemini 输出可见卡名/编号，与当前 `assetKey` 匹配后再点进详情（实现成本高于 MVP）。
+
+3. **与 CSV 的关系**  
+   - DB / `vision-channels.csv` 仍是 **真相来源**（`assetKey`、入库键）。  
+   - 收藏夹只是 **UI 入口**；App 里增删卡后需与 CSV 同步，否则会对错行。
+
+**风险：** 列表 UI 改版、行高变化、滑动惯性导致点偏；心愿单与收藏若布局不同需两套 layout 或分支配置。
+
+> 若确定采用此方案，可新增 `vision.config.json` → `"navigationMode": "wishlist"`，与 `"search"` 并存，再改 `apps/vision/rpa.py` / `main.py` 步骤链。
 
 ### 4.3 人机对抗
 

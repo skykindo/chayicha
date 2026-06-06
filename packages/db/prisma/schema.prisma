@@ -77,11 +77,12 @@ model PriceStream {
   watchCount    Int?          // 围观/收藏人数
   isDelayed     Boolean       @default(false) // 是否触发截标延时
   info          String?       // 原始标题/备注，用于追溯
+  dealSeq       Int           @default(0) // 同日同价多条成交的序号（0 起）
 
   capturedAt    DateTime      @default(dbgenerated("CURRENT_TIMESTAMP(3)")) @db.Timestamptz(3)
   capturedDate  String        // YYYY-MM-DD，前端天级横轴对齐
 
-  @@unique([assetKey, platform, tradeType, price, capturedDate, cardCondition, info])
+  @@unique([assetKey, platform, tradeType, price, capturedDate, cardCondition, info, dealSeq])
   @@index([assetKey, capturedDate(sort: Desc)])
   @@index([assetKey, capturedAt(sort: Desc)])
   @@index([platform])

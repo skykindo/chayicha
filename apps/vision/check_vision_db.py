@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import load_config
-from db import _connect
+from db import AUCTION_DEAL_INFO, LEGACY_VISION_INFO, VISION_INFO_LABELS, _connect
 from psycopg2.extras import RealDictCursor
 
 ASSET_KEYS = [
@@ -70,6 +70,33 @@ def main() -> int:
             cur.execute(SQL_RECENT_ANY)
             recent_vision = cur.fetchall()
 
+    print("[check] 标准 info 命名:")
+    for label in VISION_INFO_LABELS:
+        print(f"    {label}")
+    if LEGACY_VISION_INFO:
+        print("[check] 已废弃旧命名（库内不应再出现）:")
+        for old, new in LEGACY_VISION_INFO.items():
+            print(f"    {old} → {new}")
+    print()
+
+    legacy_rows = [r for r in rows if r["info"] in LEGACY_VISION_INFO]
+    if legacy_rows:
+        print(f"[check] 警告: 仍有 {len(legacy_rows)} 条旧命名记录，请跑 cleanup --delete-all 后重采")
+        print()
+
+    wrong_jihuan = [
+        r
+        for r in rows
+        if r["info"] in ("[VISION] 集换价-RAW", "[VISION] 一口价-集换价")
+        and r["cardCondition"] != "RAW"
+    ]
+    if wrong_jihuan:
+        print(
+            f"[check] 警告: {len(wrong_jihuan)} 条「集换价-RAW」cardCondition 非 RAW"
+            "（平台均价应为裸卡），请 cleanup --delete-all 后重采"
+        )
+        print()
+
     print(f"[check] 6 张卡 [VISION] 标记记录: {len(rows)} 条")
     print(f"[check] 全库 JIHUANSHE+[VISION] 记录: {vision_total} 条")
     print(f"[check] 6 张卡任意 JIHUANSHE 记录(最近50): {len(all_jhs)} 条\n")
@@ -90,10 +117,37 @@ def main() -> int:
         if not items:
             print("    (无 [VISION] 价格)")
             continue
+        grouped: dict[str, list] = {}
         for r in items:
+            grouped.setdefault(r["info"], []).append(r)
+
+        auction_infos = set(AUCTION_DEAL_INFO.values())
+        for info in VISION_INFO_LABELS:
+            group = grouped.get(info)
+            if not group:
+                continue
+            sample = group[0]
+            if info in auction_infos:
+                prices = sorted(
+                    (float(r["price"]) for r in group), reverse=True
+                )
+                print(
+                    f"    {info} | {sample['tradeType']}/{sample['cardCondition']} "
+                    f"| prices={prices} ({len(prices)}条) | {sample['capturedAt']}"
+                )
+            else:
+                print(
+                    f"    {info} | {sample['tradeType']}/{sample['cardCondition']} "
+                    f"| price={sample['price']} | {sample['capturedAt']}"
+                )
+        extra = [info for info in grouped if info not in VISION_INFO_LABELS]
+        for info in extra:
+            group = grouped[info]
+            sample = group[0]
+            prices = [float(r["price"]) for r in group]
             print(
-                f"    {r['info']} | {r['tradeType']}/{r['cardCondition']} "
-                f"| price={r['price']} | {r['capturedAt']}"
+                f"    {info} | {sample['tradeType']}/{sample['cardCondition']} "
+                f"| prices={prices} | {sample['capturedAt']}"
             )
         print()
 
