@@ -21,6 +21,7 @@
     "scraper:progress": "npx tsx scripts/check-scraper-progress.ts",
     "vision": "python apps/vision/main.py",
     "vision:calibrate": "python apps/vision/calibrate_layout.py",
+    "vision:test-click": "python apps/vision/test_click.py",
     "vision:list": "python apps/vision/main.py --list",
     "vision:import": "npx tsx scripts/import-vision-channels.ts",
     "vision:export": "npx tsx scripts/export-vision-channels.ts",

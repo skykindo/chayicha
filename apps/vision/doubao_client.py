@@ -18,6 +18,7 @@ from vision_prompts import (
     FLOOR_PROMPT,
     PRODUCT_PROMPT,
     WISHLIST_SCAN_PROMPT,
+    coerce_item_dicts,
     extract_json,
     parse_items_response,
 )
@@ -181,8 +182,8 @@ def parse_screenshot(cfg: VisionConfig, image_path: Path, *, tab: str) -> list[d
 
     text = _chat_with_image(cfg, prompt=prompt, image_path=image_path, label=tab_label)
     data = extract_json(text)
-    items = data.get("items")
-    if not isinstance(items, list):
+    items = coerce_item_dicts(data.get("items"))
+    if not items:
         raise RuntimeError(f"豆包 JSON 缺少 items 数组: {text[:200]}")
     if tab == "product":
         card_name = data.get("cardName")
@@ -211,8 +212,8 @@ def parse_detail_entry(
         series = str(series).strip() or None
     if card_number is not None:
         card_number = str(card_number).strip() or None
-    items = data.get("items")
-    if not isinstance(items, list):
+    items = coerce_item_dicts(data.get("items"))
+    if not items:
         raise RuntimeError(f"豆包 JSON 缺少 items 数组: {text[:200]}")
     return series, card_number, card_name, items
 

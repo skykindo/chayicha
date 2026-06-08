@@ -159,7 +159,7 @@ def occupied_slots_for_page(page: dict, page_no: int, channel_count: int) -> int
 
 
 def iter_page_cells(page: dict) -> list[tuple[int, int, int]]:
-    """本页所有格 (row, col, index)，默认 3 行 × 4 列 = 12。"""
+    """本页所有格 (row, col, index)，行列数由 layout wishlistPageScan.cols/rows 决定。"""
     scan = _page_scan(page)
     cols = int(scan.get("cols", 4))
     rows = int(scan.get("rows", 3))

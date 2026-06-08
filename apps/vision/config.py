@@ -28,6 +28,7 @@ class VisionConfig:
     screenshot_wait_sec: float
     click_pause_sec: float
     window_position: tuple[int, int]
+    window_move_enabled: bool
     vision_provider: str
     vision_min_interval_sec: float
     vision_max_retries: int
@@ -154,6 +155,7 @@ def load_config() -> VisionConfig:
         screenshot_wait_sec=float(raw.get("screenshotWaitSec", 2)),
         click_pause_sec=float(raw.get("clickPauseSec", 0.35)),
         window_position=tuple(raw.get("windowPosition", [0, 0])),  # type: ignore[arg-type]
+        window_move_enabled=bool(raw.get("windowMoveEnabled", True)),
         vision_provider=str(
             os.getenv("VISION_PROVIDER", raw.get("visionProvider", "gemini"))
         ).strip().lower(),

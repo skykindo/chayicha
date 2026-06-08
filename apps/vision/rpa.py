@@ -6,6 +6,8 @@ import json
 import time
 from pathlib import Path
 
+import dpi_fix  # noqa: F401 — Windows 高 DPI 坐标修正（须在 pyautogui 前）
+
 import pyautogui
 import pyperclip
 
@@ -34,9 +36,9 @@ class Layout:
         return int(x), int(y)
 
     def grid_slot_key(self, index: int) -> str:
-        """index 0-based，对应 grid_01 … grid_12（4 列 × 3 行，从左到右、从上到下）。"""
-        if index < 0 or index > 11:
-            raise ValueError(f"grid 槽位 index 须在 0～11，收到 {index}")
+        """index 0-based，对应 grid_01 …（行列数见 layout wishlistPageScan）。"""
+        if index < 0:
+            raise ValueError(f"grid 槽位 index 无效: {index}")
         return f"grid_{index + 1:02d}"
 
 
@@ -46,6 +48,30 @@ def load_layout(path: Path, profile: str | None = None) -> Layout:
 
 def load_layout_data(path: Path, profile: str | None = None) -> dict:
     return load_layout_file(path, profile)
+
+
+def _try_activate_window(win) -> None:
+    try:
+        if win.isMinimized:
+            win.restore()
+    except Exception as exc:
+        print(f"[rpa] 警告: 无法还原窗口: {exc}", flush=True)
+    try:
+        win.activate()
+    except Exception as exc:
+        print(
+            f"[rpa] 警告: 无法自动激活窗口 ({exc})，尝试点击窗口中心…",
+            flush=True,
+        )
+        try:
+            cx = int(win.left) + int(win.width) // 2
+            cy = int(win.top) + int(win.height) // 2
+            pyautogui.click(cx, cy)
+        except Exception as click_exc:
+            print(
+                f"[rpa] 警告: 点击窗口失败 ({click_exc})，请手动点一下集换社窗口",
+                flush=True,
+            )
 
 
 def focus_window(cfg: VisionConfig, layout: Layout) -> None:
@@ -63,12 +89,23 @@ def focus_window(cfg: VisionConfig, layout: Layout) -> None:
         )
 
     win = matches[0]
-    if win.isMinimized:
-        win.restore()
-    win.activate()
+    _try_activate_window(win)
     time.sleep(0.3)
+    if not cfg.window_move_enabled:
+        print(
+            "[rpa] windowMoveEnabled=false，跳过自动移位（请保持窗口在校准时位置）",
+            flush=True,
+        )
+        return
     x, y = cfg.window_position
-    win.moveTo(x, y)
+    try:
+        win.moveTo(x, y)
+    except Exception as exc:
+        print(
+            f"[rpa] 警告: 无法移动窗口到 ({x},{y}) ({exc})。"
+            "模拟器常拒绝程序移位，请手动将窗口放到校准时位置。",
+            flush=True,
+        )
 
 
 def paste_and_submit(text: str) -> None:
@@ -219,7 +256,8 @@ class VisionRpa:
         return screenshot_region(self.layout, dest)
 
     def open_grid_card(self, slot_index: int) -> None:
-        cols = 4
+        scan = self.layout_data.get("wishlistPageScan") or {}
+        cols = int(scan.get("cols", 4))
         row = slot_index // cols
         col = slot_index % cols
         key = self.layout.grid_slot_key(slot_index)

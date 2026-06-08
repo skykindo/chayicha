@@ -177,12 +177,37 @@ def extract_json(text: str) -> dict:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    return json.loads(text)
+    parsed = json.loads(text)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        if not parsed:
+            return {"items": []}
+        if len(parsed) == 1 and isinstance(parsed[0], dict):
+            lone = parsed[0]
+            if any(
+                k in lone
+                for k in ("cardName", "series", "cardNumber", "items", "cards")
+            ):
+                return lone
+        if all(isinstance(x, dict) for x in parsed):
+            if any("priceKind" in x or "price" in x for x in parsed):
+                return {"items": parsed}
+            if any("name" in x and "row" in x for x in parsed):
+                return {"cards": parsed}
+        raise RuntimeError(f"识图 JSON 为无法识别的数组: {text[:300]}")
+    raise RuntimeError(f"识图 JSON 根类型无效: {type(parsed).__name__}")
+
+
+def coerce_item_dicts(items: object) -> list[dict]:
+    if not isinstance(items, list):
+        return []
+    return [x for x in items if isinstance(x, dict)]
 
 
 def parse_items_response(text: str) -> list[dict]:
     data = extract_json(text)
-    items = data.get("items")
-    if not isinstance(items, list):
+    items = coerce_item_dicts(data.get("items"))
+    if not items:
         raise RuntimeError(f"识图 JSON 缺少 items 数组: {text[:200]}")
     return items
